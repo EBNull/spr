@@ -107,7 +107,7 @@ Date:   Wed May 21 19:53:12 1980 -0700
 	}
 
 	for _, tc := range tests {
-		actualCommits, valid := parseLocalCommitStack(tc.inputCommitLog)
+		actualCommits, valid := parseLocalCommitStack(tc.inputCommitLog, false)
 		assert.Equal(t, tc.expectedCommits, actualCommits, tc.name)
 		assert.Equal(t, tc.expectedValid, valid, tc.name)
 		if tc.expectedValid {

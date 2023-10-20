@@ -56,8 +56,14 @@ func GetLocalCommitStack(cfg *config.Config, gitcmd GitInterface) []Commit {
 	logCommand := fmt.Sprintf("log --format=medium --no-color %s/%s..HEAD",
 		cfg.Repo.GitHubRemote, cfg.Repo.GitHubBranch)
 	gitcmd.MustGit(logCommand, &commitLog)
-	commits, valid := parseLocalCommitStack(commitLog)
+	commits, valid := parseLocalCommitStack(commitLog, true) // Allow patchIds (which papers over missing `commit-id` in descriptions)
 	if !valid {
+		// TODO(eb): Record bad commits (ones with no id) and match them up with good commits (ones with an id)
+		//           Can probably use `git diff-tree HEAD -p | git patch-id` since we wouldn't be changing the content
+		//           of the commit, only the message (and thus the hash).
+		//           Using this patch id would let us tie in with `git branchless` and automatically `obsolete`
+		//           the "bad" commit in favor of the "good" commit.
+		panic("A commit in your patch stack is missing a `commit-id:xxxxxxxx` line.")
 		// if not valid - run rebase to add commit ids
 		rewordPath, err := exec.LookPath("spr_reword_helper")
 		check(err)
@@ -66,7 +72,7 @@ func GetLocalCommitStack(cfg *config.Config, gitcmd GitInterface) []Commit {
 		gitcmd.GitWithEditor(rebaseCommand, nil, rewordPath)
 
 		gitcmd.MustGit(logCommand, &commitLog)
-		commits, valid = parseLocalCommitStack(commitLog)
+		commits, valid = parseLocalCommitStack(commitLog, true)
 		if !valid {
 			// if still not valid - panic
 			errMsg := "unable to fetch local commits\n"
@@ -77,7 +83,19 @@ func GetLocalCommitStack(cfg *config.Config, gitcmd GitInterface) []Commit {
 	return commits
 }
 
-func parseLocalCommitStack(commitLog string) ([]Commit, bool) {
+// patchIdForCommit returns a patch ID, which is a "fuzzy" inexact identifier of a tree's contents
+//
+// While this ID is not stable when a commit's description is modified (such as by adding a commit-id),
+// it is a useful approximation for a commit-id on the local system (and commits without a real commit-id
+// should not be pushed).
+//
+// See https://git-scm.com/docs/git-diff-tree and https://git-scm.com/docs/git-patch-id for more details.
+func patchIdForCommit(gitcmd GitInterface, commitHash string) (string, error) {
+	// TODO(eb): Implement this - since the commit never leaves the local system, the commit hash works too
+	return commitHash, nil
+}
+
+func parseLocalCommitStack(commitLog string, patchIdOk bool) ([]Commit, bool) {
 	var commits []Commit
 
 	commitHashRegex := regexp.MustCompile(`^commit ([a-f0-9]{40})`)
@@ -111,9 +129,25 @@ func parseLocalCommitStack(commitLog string) ([]Commit, bool) {
 		if matches != nil {
 			log.Debug().Interface("matches", matches).Msg("parseLocalCommitStack :: commitHashMatch")
 			if commitScanOn {
-				// missing the commit-id
-				log.Debug().Msg("parseLocalCommitStack :: missing commit id")
-				return nil, false
+				// missing the commit-id of previous commit
+				if !patchIdOk {
+					log.Debug().Msg("parseLocalCommitStack :: missing commit id")
+					return nil, false
+				}
+				// ah, but we can get a patchId instead
+				patchId, err := patchIdForCommit(nil, scannedCommit.CommitHash)
+				if err != nil {
+					log.Debug().Msg(fmt.Sprintf("parseLocalCommitStack :: missing commit id and could not get patch id :: %s", err))
+					return nil, false
+				}
+				log.Debug().Msg("parseLocalCommitStack :: but has patch ID; using that and marking commit WIP")
+				// TODO: refactor, the next two lines are repeated in the "last thing in the commit" section below
+				scannedCommit.CommitID = patchId
+				scannedCommit.Body = strings.TrimSpace(scannedCommit.Body)
+
+				scannedCommit.WIP = true // All commits using patchId must be marked WIP because we can never upload them
+
+				commits = prepend(commits, scannedCommit)
 			}
 			commitScanOn = true
 			scannedCommit = Commit{
