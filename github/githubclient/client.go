@@ -375,14 +375,19 @@ func (c *client) CreatePullRequest(ctx context.Context, gitcmd git.GitInterface,
 			log.Fatal().Err(err).Msg("failed to insert body into PR template")
 		}
 	}
-	resp, err := c.api.CreatePullRequest(ctx, genclient.CreatePullRequestInput{
+	req := genclient.CreatePullRequestInput{
 		RepositoryId: info.RepositoryID,
 		BaseRefName:  baseRefName,
 		HeadRefName:  headRefName,
 		Title:        commit.Subject,
 		Body:         &body,
 		Draft:        &c.config.User.CreateDraftPRs,
-	})
+	}
+	if c.config.User.LogGitHubCalls {
+		fmt.Printf("> github create pr : %+v\n", req)
+	}
+
+	resp, err := c.api.CreatePullRequest(ctx, req)
 	check(err)
 
 	pr := &github.PullRequest{
