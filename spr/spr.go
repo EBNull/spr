@@ -134,7 +134,12 @@ func alignLocalCommits(commits []git.Commit, prs []*github.PullRequest) []git.Co
 //	 will also be reordered to match the commit stack order.
 func (sd *stackediff) UpdatePullRequests(ctx context.Context, reviewers []string, count *uint) {
 	sd.profiletimer.Step("UpdatePullRequests::Start")
-	githubInfo := sd.fetchAndGetGitHubInfo(ctx)
+	// TODO(eb): Add options, CLI or config file, for controlling fetch and rebase during update
+	doFetch := false
+	doRebase := false
+	// If fetch is false here, we won't change any remote refs. This means we may miss upstream changes.
+	// If rebase is false here, we won't rebase onto the remote refs.
+	githubInfo := sd.maybeFetchAndGetGitHubInfo(ctx, doFetch, doRebase)
 	if githubInfo == nil {
 		return
 	}
@@ -475,17 +480,21 @@ func sortPullRequestsByLocalCommitOrder(pullRequests []*github.PullRequest, loca
 	return sortedPullRequests
 }
 
-func (sd *stackediff) fetchAndGetGitHubInfo(ctx context.Context) *github.GitHubInfo {
-	if sd.config.Repo.ForceFetchTags {
-		sd.gitcmd.MustGit("fetch --tags --force", nil)
-	} else {
-		sd.gitcmd.MustGit("fetch", nil)
+func (sd *stackediff) maybeFetchAndGetGitHubInfo(ctx context.Context, fetch bool, rebase bool) *github.GitHubInfo {
+	if fetch {
+		if sd.config.Repo.ForceFetchTags {
+			sd.gitcmd.MustGit("fetch --tags --force", nil)
+		} else {
+			sd.gitcmd.MustGit("fetch", nil)
+		}
 	}
-	rebaseCommand := fmt.Sprintf("rebase %s/%s --autostash",
-		sd.config.Repo.GitHubRemote, sd.config.Repo.GitHubBranch)
-	err := sd.gitcmd.Git(rebaseCommand, nil)
-	if err != nil {
-		return nil
+	if rebase {
+		rebaseCommand := fmt.Sprintf("rebase %s/%s --autostash",
+			sd.config.Repo.GitHubRemote, sd.config.Repo.GitHubBranch)
+		err := sd.gitcmd.Git(rebaseCommand, nil)
+		if err != nil {
+			return nil
+		}
 	}
 	info := sd.github.GetInfo(ctx, sd.gitcmd)
 	if git.BranchNameRegex.FindString(info.LocalBranch) != "" {
