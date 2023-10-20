@@ -1,3 +1,5 @@
+This is a fork; see [fork.md](fork.md)
+
 ![logo](docs/git_spr_logo.png)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build](https://github.com/ejoffe/spr/actions/workflows/ci.yml/badge.svg)](https://github.com/ejoffe/spr/actions/workflows/ci.yml)
