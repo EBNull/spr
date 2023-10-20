@@ -312,6 +312,14 @@ func (sd *stackediff) MergePullRequests(ctx context.Context, count *uint) {
 	if prIndex == -1 {
 		return
 	}
+
+	// TODO(eb): Make this an option somewhere
+	oneCommitPerPR := true
+	if prIndex > 0 && oneCommitPerPR {
+		fmt.Fprintf(sd.output, "Found more than one mergable PR, but oneCommitPerPR is set. Continuing as if only one PR is mergable. You'll need to rerun merge.")
+		prIndex = 0
+	}
+
 	prToMerge := githubInfo.PullRequests[prIndex]
 
 	// Update the base of the merging pr to target branch
