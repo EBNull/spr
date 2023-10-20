@@ -26,10 +26,16 @@ func GetLocalBranchName(gitcmd GitInterface) string {
 
 func BranchNameFromCommit(cfg *config.Config, commit Commit) string {
 	remoteBranchName := cfg.Repo.GitHubBranch
-	return "spr/" + remoteBranchName + "/" + commit.CommitID
+	// TODO(eb): Make the branch prefix configurable, perhaps based on the commit description (ticket/bug id?)
+	branchPrefix := "ebnull"
+	elms := []string{"spr", remoteBranchName, commit.CommitID}
+	if branchPrefix != "" {
+		elms = append([]string{elms[0], branchPrefix}, elms[1:]...)
+	}
+	return strings.Join(elms, "/")
 }
 
-var BranchNameRegex = regexp.MustCompile(`spr/([a-zA-Z0-9_\-/\.]+)/([a-f0-9]{8})$`)
+var BranchNameRegex = regexp.MustCompile(`spr/([a-zA-Z0-9_\-/\.]+/)?([a-zA-Z0-9_\-/\.]+)/([a-f0-9]{8})$`)
 
 // GetLocalTopCommit returns the top unmerged commit in the stack
 //
